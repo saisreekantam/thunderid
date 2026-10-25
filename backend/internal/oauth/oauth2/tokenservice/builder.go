@@ -478,5 +478,9 @@ func (tb *tokenBuilder) buildIDTokenClaims(ctx *IDTokenBuildContext) map[string]
 		claims[key] = value
 	}
 
+	for key, value := range ctx.AdditionalClaims {
+		claims[key] = value
+	}
+
 	return claims
 }

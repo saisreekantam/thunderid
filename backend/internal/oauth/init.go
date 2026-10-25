@@ -55,6 +55,7 @@ func Initialize(
 	transactioner providers.Transactioner,
 	enforcementService revocation.EnforcementServiceInterface,
 	revocationSvc revocation.RevocationServiceInterface,
+	nativeSSO granthandlers.NativeSSODependencies,
 	cfg oauthconfig.Config,
 ) (tokenservice.TokenValidatorInterface, error) {
 	jwks.Initialize(mux, runtimeCrypto)
@@ -76,8 +77,8 @@ func Initialize(
 		revocationSvc = nil
 	}
 
-	tokenBuilder, tokenValidator := tokenservice.Initialize(
-		cfg, jwtService, jweService, resolver, idpService, enforcementService, jtiStore)
+	tokenBuilder, tokenValidator := tokenservice.Initialize(cfg, jwtService, jweService, resolver, idpService,
+		granthandlers.NewNativeSSOEnforcement(enforcementService, nativeSSO), jtiStore)
 	parService := par.Initialize(mux, actorProvider, authnProvider, jwtService, discoveryService,
 		resourceService, dpopVerifier, cfg, runtimeStore, jtiStore)
 	oauth2AuthzService, err := oauth2authz.Initialize(mux, actorProvider, resourceService,
@@ -96,7 +97,7 @@ func Initialize(
 	grantHandlerProvider := granthandlers.Initialize(
 		jwtService, oauth2AuthzService, tokenBuilder, tokenValidator,
 		attributeCacheSvc, ouService, authzService, actorProvider, resourceService,
-		cibaService, revocationSvc, revocationSvc, cfg)
+		cibaService, revocationSvc, revocationSvc, nativeSSO, cfg)
 
 	token.Initialize(mux, jwtService, actorProvider, authnProvider, grantHandlerProvider,
 		scopeValidator, observabilitySvc, discoveryService, dpopVerifier, jtiStore, cfg)

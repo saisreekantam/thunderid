@@ -551,6 +551,18 @@ packages:
 
   github.com/thunder-id/thunderid/pkg/thunderidengine/providers:
     interfaces:
+      DeviceSecretProvider:
+        config:
+          dir: tests/mocks/devicesecretprovidermock
+          structname: '{{.InterfaceName}}Mock'
+          pkgname: devicesecretprovidermock
+          filename: "{{.InterfaceName}}_mock.go"
+      NativeSSOConsentProvider:
+        config:
+          dir: tests/mocks/nativessoconsentprovidermock
+          structname: '{{.InterfaceName}}Mock'
+          pkgname: nativessoconsentprovidermock
+          filename: "{{.InterfaceName}}_mock.go"
       AuthnProviderManager:
         config:
           dir: tests/mocks/authnprovider/managermock

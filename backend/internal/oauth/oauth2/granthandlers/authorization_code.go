@@ -28,6 +28,7 @@ type authorizationCodeGrantHandler struct {
 	tokenBuilder    tokenservice.TokenBuilderInterface
 	attributeCache  attributecache.AttributeCacheServiceInterface
 	resourceService providers.ResourceServerProvider
+	nativeSSO       NativeSSODependencies
 }
 
 // newAuthorizationCodeGrantHandler creates a new instance of AuthorizationCodeGrantHandler.
@@ -36,12 +37,14 @@ func newAuthorizationCodeGrantHandler(
 	tokenBuilder tokenservice.TokenBuilderInterface,
 	attributeCache attributecache.AttributeCacheServiceInterface,
 	resourceService providers.ResourceServerProvider,
+	nativeSSO NativeSSODependencies,
 ) GrantHandlerInterface {
 	return &authorizationCodeGrantHandler{
 		authzService:    authzService,
 		tokenBuilder:    tokenBuilder,
 		attributeCache:  attributeCache,
 		resourceService: resourceService,
+		nativeSSO:       nativeSSO,
 	}
 }
 
@@ -96,8 +99,14 @@ func (h *authorizationCodeGrantHandler) HandleGrant(ctx context.Context, tokenRe
 		return nil, errResp
 	}
 
-	// Parse authorized scopes
-	authorizedScopes := tokenservice.ParseScopes(authCode.Scopes)
+	// Parse authorized scopes. device_sso is a protocol scope: it requests a device_secret and is
+	// never carried on the issued tokens.
+	authorizedScopes, deviceSSO := splitDeviceSSOScope(tokenservice.ParseScopes(authCode.Scopes))
+	if deviceSSO {
+		if errResp := validateDeviceSSORequest(ctx, h.nativeSSO, oauthApp, authorizedScopes); errResp != nil {
+			return nil, errResp
+		}
+	}
 
 	// Get user attributes from attribute cache
 	attrs := make(map[string]interface{})
@@ -186,18 +195,31 @@ func (h *authorizationCodeGrantHandler) HandleGrant(ctx context.Context, tokenRe
 		AccessToken: *accessToken,
 	}
 
+	// Mint the Native SSO device secret; the ID token below is bound to it through ds_hash and sid.
+	var nativeSSOClaims map[string]interface{}
+	if deviceSSO {
+		deviceSecret, claims, errResp := issueDeviceSecret(ctx, h.nativeSSO, h.attributeCache, authCode,
+			tokenRequest.ClientID, accessTokenScopes)
+		if errResp != nil {
+			return nil, errResp
+		}
+		tokenResponse.DeviceSecret = deviceSecret.Value
+		nativeSSOClaims = claims
+	}
+
 	// Generate ID token if 'openid' scope is present
 	if slices.Contains(accessTokenScopes, constants.ScopeOpenID) {
 		idToken, err := h.tokenBuilder.BuildIDToken(ctx, &tokenservice.IDTokenBuildContext{
-			Subject:        authCode.AuthorizedUserID,
-			Audience:       tokenRequest.ClientID,
-			Scopes:         accessTokenScopes,
-			UserAttributes: attrs,
-			AuthTime:       authCode.TimeCreated.Unix(),
-			OAuthApp:       oauthApp,
-			ClaimsRequest:  authCode.ClaimsRequest,
-			Nonce:          authCode.Nonce,
-			CompletedACR:   authCode.CompletedACR,
+			Subject:          authCode.AuthorizedUserID,
+			Audience:         tokenRequest.ClientID,
+			Scopes:           accessTokenScopes,
+			UserAttributes:   attrs,
+			AuthTime:         authCode.TimeCreated.Unix(),
+			OAuthApp:         oauthApp,
+			ClaimsRequest:    authCode.ClaimsRequest,
+			Nonce:            authCode.Nonce,
+			CompletedACR:     authCode.CompletedACR,
+			AdditionalClaims: nativeSSOClaims,
 		})
 		if err != nil {
 			logger.Error(ctx, "Failed to generate ID token", log.Error(err))

@@ -107,6 +107,9 @@ type IDTokenBuildContext struct {
 	ClaimsRequest  *oauth2model.ClaimsRequest
 	Nonce          string
 	CompletedACR   string
+	// AdditionalClaims are protocol claims added to the ID token as-is, such as the Native SSO
+	// ds_hash and sid claims.
+	AdditionalClaims map[string]interface{}
 }
 
 // RefreshTokenClaims represents the validated claims from a refresh token.

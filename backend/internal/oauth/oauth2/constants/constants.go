@@ -152,6 +152,10 @@ const (
 	// Authorization Grant (draft-ietf-oauth-identity-assertion-authz-grant).
 	//nolint:gosec // Token type identifier, not a credential
 	TokenTypeIdentifierIDJAG TokenTypeIdentifier = "urn:ietf:params:oauth:token-type:id-jag"
+	// TokenTypeIdentifierDeviceSecret is the actor_token_type of an OpenID Connect Native SSO for
+	// Mobile Apps 1.0 token exchange, where the actor_token is the device_secret.
+	//nolint:gosec // Token type identifier, not a credential
+	TokenTypeIdentifierDeviceSecret TokenTypeIdentifier = "urn:openid:params:token-type:device-secret"
 )
 
 // supportedTokenTypeIdentifiers is the single source of truth for all supported token type identifiers.
@@ -161,6 +165,7 @@ var supportedTokenTypeIdentifiers = []TokenTypeIdentifier{
 	TokenTypeIdentifierIDToken,
 	TokenTypeIdentifierJWT,
 	TokenTypeIdentifierIDJAG,
+	TokenTypeIdentifierDeviceSecret,
 }
 
 // IsValid checks if the TokenTypeIdentifier is valid.
@@ -195,6 +200,7 @@ const (
 	ErrorExpiredToken             string = "expired_token" // #nosec G101
 	ErrorUnknownUserID            string = "unknown_user_id"
 	ErrorInvalidBindingMessage    string = "invalid_binding_message"
+	ErrorInteractionRequired      string = "interaction_required"
 )
 
 // UnSupportedGrantTypeError is returned when an unsupported grant type is requested.
@@ -312,6 +318,18 @@ const (
 // Standard OIDC scope names.
 const (
 	ScopeOpenID = "openid"
+	// ScopeDeviceSSO requests a device_secret for OpenID Connect Native SSO for Mobile Apps 1.0. It is
+	// a protocol scope: it is never carried on issued access tokens and cannot be requested on token
+	// exchange.
+	ScopeDeviceSSO = "device_sso"
+)
+
+// OpenID Connect Native SSO for Mobile Apps 1.0 ID token claims.
+const (
+	// ClaimDeviceSecretHash binds an ID token to the device_secret issued alongside it.
+	ClaimDeviceSecretHash = "ds_hash"
+	// ClaimSessionID identifies the authentication session shared through Native SSO.
+	ClaimSessionID = "sid"
 )
 
 const (

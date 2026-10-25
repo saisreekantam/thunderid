@@ -25,6 +25,7 @@ import (
 	"github.com/thunder-id/thunderid/internal/oauth"
 	oauthconfig "github.com/thunder-id/thunderid/internal/oauth/config"
 	"github.com/thunder-id/thunderid/internal/oauth/oauth2/dpop"
+	"github.com/thunder-id/thunderid/internal/oauth/oauth2/granthandlers"
 	"github.com/thunder-id/thunderid/internal/oauth/oauth2/jti"
 	"github.com/thunder-id/thunderid/internal/oauth/oauth2/revocation"
 	"github.com/thunder-id/thunderid/internal/runtimestore"
@@ -221,7 +222,11 @@ func New(mux *http.ServeMux, opts ...Option) *Engine {
 		engineCtx.jweService, engineCtx.flowExecService, engineCtx.observabilitySvc, engineCtx.runtimeCryptoSvc,
 		engineCtx.ouProvider, engineCtx.attributeCacheService, engineCtx.authzProvider, engineCtx.resourceProvider,
 		engineCtx.i18nProvider, engineCtx.idpProvider, engineCtx.dpopVerifier, engineCtx.runtimeStoreProvider,
-		engineCtx.transactioner, revocationEnforcer, revocationService, oauthConfig)
+		engineCtx.transactioner, revocationEnforcer, revocationService,
+		granthandlers.NativeSSODependencies{
+			DeviceSecret: engineCtx.deviceSecretProvider,
+			Consent:      engineCtx.nativeSSOConsentProvider,
+		}, oauthConfig)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize OAuth services", log.Error(err))
 	}
@@ -384,6 +389,8 @@ type engineContext struct {
 	authzProvider             providers.AuthorizationProvider
 	attestationProvider       providers.AttestationProvider
 	captchaValidationProvider providers.CaptchaValidationProvider
+	deviceSecretProvider      providers.DeviceSecretProvider
+	nativeSSOConsentProvider  providers.NativeSSOConsentProvider
 
 	transactioner        providers.Transactioner
 	runtimeStoreProvider providers.RuntimeStoreProvider
@@ -510,6 +517,18 @@ func WithI18nProvider(provider providers.I18nProvider) Option {
 // WithIDPProvider supplies the IDP provider.
 func WithIDPProvider(provider providers.IDPProvider) Option {
 	return func(c *engineContext) { c.idpProvider = provider }
+}
+
+// WithDeviceSecretProvider enables OpenID Connect Native SSO for Mobile Apps 1.0 with the given
+// device secret provider. Native SSO is disabled when no provider is supplied.
+func WithDeviceSecretProvider(provider providers.DeviceSecretProvider) Option {
+	return func(c *engineContext) { c.deviceSecretProvider = provider }
+}
+
+// WithNativeSSOConsentProvider supplies the provider that decides whether an app signing in
+// through Native SSO may reuse the consent given to the app that minted the device secret.
+func WithNativeSSOConsentProvider(provider providers.NativeSSOConsentProvider) Option {
+	return func(c *engineContext) { c.nativeSSOConsentProvider = provider }
 }
 
 // WithConsentProvider supplies the consent provider.

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/thunder-id/thunderid/internal/attributecache"
 	oauthconfig "github.com/thunder-id/thunderid/internal/oauth/config"
 	"github.com/thunder-id/thunderid/internal/oauth/oauth2/constants"
 	"github.com/thunder-id/thunderid/internal/oauth/oauth2/dpop"
@@ -27,6 +28,10 @@ type tokenExchangeGrantHandler struct {
 	tokenBuilder    tokenservice.TokenBuilderInterface
 	tokenValidator  tokenservice.TokenValidatorInterface
 	resourceService providers.ResourceServerProvider
+	attributeCache  attributecache.AttributeCacheServiceInterface
+	jwtService      jwt.JWTServiceInterface
+	actorProvider   providers.ActorProvider
+	nativeSSO       NativeSSODependencies
 	cfg             oauthconfig.Config
 }
 
@@ -35,12 +40,20 @@ func newTokenExchangeGrantHandler(
 	tokenBuilder tokenservice.TokenBuilderInterface,
 	tokenValidator tokenservice.TokenValidatorInterface,
 	resourceService providers.ResourceServerProvider,
+	attributeCache attributecache.AttributeCacheServiceInterface,
+	jwtService jwt.JWTServiceInterface,
+	actorProvider providers.ActorProvider,
+	nativeSSO NativeSSODependencies,
 	cfg oauthconfig.Config,
 ) GrantHandlerInterface {
 	return &tokenExchangeGrantHandler{
 		tokenBuilder:    tokenBuilder,
 		tokenValidator:  tokenValidator,
 		resourceService: resourceService,
+		attributeCache:  attributeCache,
+		jwtService:      jwtService,
+		actorProvider:   actorProvider,
+		nativeSSO:       nativeSSO,
 		cfg:             cfg,
 	}
 }
@@ -69,7 +82,8 @@ func (h *tokenExchangeGrantHandler) ValidateGrant(ctx context.Context, tokenRequ
 		}
 	}
 
-	if !constants.TokenTypeIdentifier(tokenRequest.SubjectTokenType).IsValid() {
+	if !constants.TokenTypeIdentifier(tokenRequest.SubjectTokenType).IsValid() ||
+		constants.TokenTypeIdentifier(tokenRequest.SubjectTokenType) == constants.TokenTypeIdentifierDeviceSecret {
 		return &model.ErrorResponse{
 			Error:            constants.ErrorInvalidRequest,
 			ErrorDescription: "Unsupported subject_token_type",
@@ -100,6 +114,10 @@ func (h *tokenExchangeGrantHandler) ValidateGrant(ctx context.Context, tokenRequ
 				ErrorDescription: "Unsupported actor_token_type",
 			}
 		}
+	}
+
+	if constants.TokenTypeIdentifier(tokenRequest.ActorTokenType) == constants.TokenTypeIdentifierDeviceSecret {
+		return validateNativeSSOExchangeRequest(tokenRequest)
 	}
 
 	if tokenRequest.RequestedTokenType != "" {
@@ -141,6 +159,11 @@ func (h *tokenExchangeGrantHandler) HandleGrant(ctx context.Context, tokenReques
 	oauthApp *providers.OAuthClient) (
 	*model.TokenResponseDTO, *model.ErrorResponse) {
 	logger := log.GetLogger().With(log.String(log.LoggerKeyComponentName, "TokenExchangeGrantHandler"))
+
+	// A device-secret actor token is an OpenID Connect Native SSO for Mobile Apps 1.0 exchange.
+	if constants.TokenTypeIdentifier(tokenRequest.ActorTokenType) == constants.TokenTypeIdentifierDeviceSecret {
+		return h.handleNativeSSOGrant(ctx, tokenRequest, oauthApp)
+	}
 
 	// An ID-JAG request (draft-ietf-oauth-identity-assertion-authz-grant) follows a distinct path:
 	// it exchanges a self-issued ID token for a JWT authorization grant targeted at an external

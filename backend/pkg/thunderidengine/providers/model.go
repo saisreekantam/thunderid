@@ -1365,3 +1365,71 @@ type PublicKeyInfo struct {
 	CertificateDER      []byte
 	CertificateChainDER [][]byte // leaf first, then intermediates; nil if not certificate-backed
 }
+
+// DeviceSecretRequest describes the authenticated session a device secret is minted for
+// (OpenID Connect Native SSO for Mobile Apps 1.0).
+type DeviceSecretRequest struct {
+	// Subject is the authenticated user's subject identifier.
+	Subject string
+	// AuthID identifies the authorization transaction; it is used as the SSO session id (sid).
+	AuthID string
+	// ClientID is the client the device secret is minted for (the "super app").
+	ClientID string
+	// Scopes are the scopes granted to ClientID, excluding the device_sso scope itself.
+	Scopes []string
+	// ACR is the authentication context class completed during login.
+	ACR string
+	// Claims is the claims request the user consented to for ClientID, if any.
+	Claims map[string]interface{}
+	// CnfJkt is the JWK SHA-256 thumbprint of the DPoP key the device secret is bound to.
+	CnfJkt string
+	// AttributeCacheID references the user attributes resolved during login, so a client signing in
+	// through Native SSO can be served the same consented attributes.
+	AttributeCacheID string
+	// AuthTime is the time the user authenticated, in seconds since the epoch.
+	AuthTime int64
+}
+
+// DeviceSecret is a minted device secret and its expiry.
+type DeviceSecret struct {
+	Value     string
+	ExpiresAt time.Time
+}
+
+// DeviceSecretClaims are the claims carried by a validated device secret.
+type DeviceSecretClaims struct {
+	ID               string
+	Issuer           string
+	Subject          string
+	SessionID        string
+	ClientID         string
+	Scopes           []string
+	ACR              string
+	Claims           map[string]interface{}
+	CnfJkt           string
+	AttributeCacheID string
+	AuthTime         int64
+	ExpiresAt        time.Time
+}
+
+// NativeSSOConsentRequest asks whether ClientID may reuse the consent the user granted to
+// OriginalClientID for the requested scopes.
+type NativeSSOConsentRequest struct {
+	Subject          string
+	ClientID         string
+	OriginalClientID string
+	RequestedScopes  []string
+	SessionID        string
+}
+
+// NativeSSOConsentResult is the outcome of a Native SSO consent check.
+type NativeSSOConsentResult struct {
+	// Covered is true when the original consent covers the request and no prompt is needed.
+	Covered bool
+	// MissingScopes lists the requested scopes the original consent does not cover.
+	MissingScopes []string
+	// ReleasableClaims are the user claims the requesting client may receive: claims it is
+	// registered for, that the user accepted for the original client and that the requested
+	// scopes release. The engine serves the requesting client only these claims.
+	ReleasableClaims []string
+}

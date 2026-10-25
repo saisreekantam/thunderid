@@ -151,7 +151,9 @@ func SeparateOIDCAndNonOIDCScopes(scopes string, scopeClaimsMapping map[string][
 	for _, scp := range scopeSlice {
 		_, isMapped := scopeClaimsMapping[scp]
 		_, isStandard := constants.StandardOIDCScopes[scp]
-		if isMapped || isStandard {
+		// device_sso is an OIDC protocol scope (Native SSO): it releases no claims and must not be
+		// downscoped to a resource server's permissions.
+		if isMapped || isStandard || scp == constants.ScopeDeviceSSO {
 			oidcScopes = append(oidcScopes, scp)
 		} else {
 			nonOidcScopes = append(nonOidcScopes, scp)

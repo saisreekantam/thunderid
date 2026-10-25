@@ -152,6 +152,45 @@ type ConsentProvider interface {
 		*Consent, *common.ServiceError)
 }
 
+// DeviceSecretProvider issues and validates the device_secret of OpenID Connect Native SSO for
+// Mobile Apps 1.0. The device secret is opaque to clients: the provider decides its format,
+// protection (e.g. signed-then-encrypted JWT) and lifetime, and owns the SSO session it represents.
+type DeviceSecretProvider interface {
+	// GenerateDeviceSecret mints a device secret for the authenticated session described by req.
+	GenerateDeviceSecret(ctx context.Context, req *DeviceSecretRequest) (*DeviceSecret, *common.ServiceError)
+
+	// ValidateDeviceSecret validates a device secret presented by clientID during token exchange.
+	// It must check integrity, expiry and revocation, and that clientID is permitted to redeem a
+	// device secret minted for the original client. A client-type ServiceError rejects the request.
+	ValidateDeviceSecret(ctx context.Context, clientID, deviceSecret string) (
+		*DeviceSecretClaims, *common.ServiceError)
+
+	// MarkDeviceSecretUsed records that clientID redeemed the device secret identified by claims,
+	// after every token exchange check has passed. It returns a client-type ServiceError when the
+	// redemption is a replay the provider's policy does not allow.
+	MarkDeviceSecretUsed(ctx context.Context, claims *DeviceSecretClaims, clientID string) *common.ServiceError
+
+	// IsSessionActive reports whether the SSO session sessionID is still open. Access tokens issued
+	// through Native SSO are rejected once their session has ended, so signing out of the SSO
+	// session also cuts off tokens already issued to the other apps.
+	IsSessionActive(ctx context.Context, sessionID string) (bool, *common.ServiceError)
+}
+
+// NativeSSOConsentProvider decides whether a client signing in through Native SSO may reuse the
+// consent the user granted to the client that minted the device secret.
+type NativeSSOConsentProvider interface {
+	// ResolveNativeSSOConsent returns whether the requested scopes are covered by the consent given
+	// to the original client, without side effects. When not covered, the token exchange is rejected
+	// with interaction_required.
+	ResolveNativeSSOConsent(ctx context.Context, req *NativeSSOConsentRequest) (
+		*NativeSSOConsentResult, *common.ServiceError)
+
+	// RecordNativeSSOConsent records that the requesting client was signed in on the strength of the
+	// original client's consent. It is called only once the token exchange has succeeded, so
+	// rejected or replayed exchanges leave no consent records.
+	RecordNativeSSOConsent(ctx context.Context, req *NativeSSOConsentRequest) *common.ServiceError
+}
+
 // CaptchaValidationProvider defines the contract for verifying captcha tokens.
 type CaptchaValidationProvider interface {
 	// Verify validates the given captcha token and returns the verification result. An invalid
